@@ -29,6 +29,11 @@ const normalizePrivateKey = (value) => {
   return value.replace(/\\n/g, "\n");
 };
 
+const looksLikeJson = (value) => {
+  const trimmed = String(value || "").trim();
+  return trimmed.startsWith("{") || trimmed.startsWith("[");
+};
+
 const loadServiceAccountFromEnv = () => {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
@@ -52,14 +57,28 @@ const loadServiceAccountFromEnv = () => {
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
     process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (pathFromEnv) {
+    // Some deploy dashboards mistakenly paste JSON into *_PATH.
+    // Support it, and avoid logging secrets.
+    if (looksLikeJson(pathFromEnv)) {
+      try {
+        const parsed = JSON.parse(String(pathFromEnv));
+        if (parsed.private_key)
+          parsed.private_key = normalizePrivateKey(parsed.private_key);
+        return parsed;
+      } catch (e) {
+        logger.warn(
+          "Firebase credentials env looked like JSON but could not be parsed; falling back to other credential options.",
+        );
+      }
+    }
+
     const resolvedPath = path.isAbsolute(pathFromEnv)
       ? pathFromEnv
       : path.resolve(serverRoot, pathFromEnv);
 
     if (!fs.existsSync(resolvedPath)) {
       logger.warn(
-        "Firebase credentials file not found at %s; ignoring file path env and checking other credential options.",
-        resolvedPath,
+        "Firebase credentials file not found; ignoring file path env and checking other credential options.",
       );
     } else {
       const parsed = readJsonFile(resolvedPath);
