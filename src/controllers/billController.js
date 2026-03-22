@@ -994,7 +994,10 @@ export const getReceiptData = async (req, res, next) => {
       data: receiptData,
     });
   } catch (error) {
-    logger.error("getReceiptData failed: %s", error?.message || "unknown error");
+    logger.error(
+      "getReceiptData failed: %s",
+      error?.message || "unknown error",
+    );
     next(error);
   }
 };

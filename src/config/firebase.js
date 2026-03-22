@@ -10,7 +10,13 @@
 
 import admin from "firebase-admin";
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { logger } from "../utils/logger.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const serverRoot = path.resolve(__dirname, "..", "..");
 
 const readJsonFile = (filePath) => {
   const raw = fs.readFileSync(filePath, "utf8");
@@ -46,10 +52,21 @@ const loadServiceAccountFromEnv = () => {
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
     process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (pathFromEnv) {
-    const parsed = readJsonFile(pathFromEnv);
-    if (parsed.private_key)
-      parsed.private_key = normalizePrivateKey(parsed.private_key);
-    return parsed;
+    const resolvedPath = path.isAbsolute(pathFromEnv)
+      ? pathFromEnv
+      : path.resolve(serverRoot, pathFromEnv);
+
+    if (!fs.existsSync(resolvedPath)) {
+      logger.warn(
+        "Firebase credentials file not found at %s; ignoring file path env and checking other credential options.",
+        resolvedPath,
+      );
+    } else {
+      const parsed = readJsonFile(resolvedPath);
+      if (parsed.private_key)
+        parsed.private_key = normalizePrivateKey(parsed.private_key);
+      return parsed;
+    }
   }
 
   // Alternate split creds
@@ -77,7 +94,7 @@ export const initFirebase = () => {
 
   if (!serviceAccount) {
     throw new Error(
-      "Missing Firebase credentials. Provide FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_BASE64, FIREBASE_SERVICE_ACCOUNT_PATH, GOOGLE_APPLICATION_CREDENTIALS, or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY.",
+      "Missing Firebase credentials. On Render, set FIREBASE_SERVICE_ACCOUNT_BASE64 (or FIREBASE_SERVICE_ACCOUNT_JSON) in the Render dashboard env vars. Avoid relying on FIREBASE_SERVICE_ACCOUNT_PATH unless the file exists in the deployed filesystem.",
     );
   }
 
