@@ -58,24 +58,24 @@ app.use(
 );
 
 // CORS - Enable Cross-Origin Resource Sharing
-app.use(
-  cors({
-    origin: config.cors.origin,
-    credentials: config.cors.credentials,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-    ],
-    exposedHeaders: ["Content-Range", "X-Content-Range"],
-    maxAge: 600, // Cache preflight request for 10 minutes
-  }),
-);
+const corsOptions = {
+  origin: config.cors.origin,
+  credentials: config.cors.credentials,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+  ],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
+  maxAge: 600, // Cache preflight request for 10 minutes
+};
 
-// Handle preflight requests explicitly
-app.options("*", cors());
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly using the same CORS configuration
+app.options("*", cors(corsOptions));
 
 // Avoid noisy 404s from browser favicon requests
 app.get("/favicon.ico", (req, res) => res.status(204).end());

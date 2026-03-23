@@ -54,6 +54,7 @@ export const config = {
           "http://localhost:5173",
           "http://localhost:3000",
           "https://kmj-billing-system.vercel.app",
+          "https://kmj-mauve.vercel.app",
           "http://kmjinfo.com",
           "https://kmjinfo.com",
           "http://www.kmjinfo.com",

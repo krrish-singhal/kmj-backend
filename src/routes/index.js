@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { config } from '../config/env.js';
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
 import memberRoutes from './memberRoutes.js';
@@ -21,7 +22,7 @@ import contactRoutes from './contactRoutes.js';
 const router = express.Router();
 
 // API version prefix
-const API_VERSION = '/v1';
+const API_VERSION = `/${config.apiVersion}`;
 
 // Health check endpoint
 router.get('/health', (req, res) => {
