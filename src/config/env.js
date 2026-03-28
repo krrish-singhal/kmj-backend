@@ -58,6 +58,7 @@ export const config = {
         "https://kmjinfo.com",
         "http://www.kmjinfo.com",
         "https://www.kmjinfo.com",
+        "https://kmjinfo.com",
       ];
 
       const envOrigins = process.env.CLIENT_URL
