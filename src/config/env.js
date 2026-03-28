@@ -48,35 +48,21 @@ export const config = {
 
   // CORS
   cors: {
-    origin: (() => {
-      const defaultOrigins = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://kmj-billing-system.vercel.app",
-        "https://kmj-mauve.vercel.app",
-        "http://kmjinfo.com",
-        "https://kmjinfo.com",
-        "http://www.kmjinfo.com",
-        "https://www.kmjinfo.com",
-        "https://kmjinfo.com",
-      ];
-
-      const envOrigins = process.env.CLIENT_URL
-        ? process.env.CLIENT_URL.split(",").map((url) => url.trim())
-        : null;
-
-      const origins =
-        Array.isArray(envOrigins) && envOrigins.length > 0
-          ? envOrigins
-          : defaultOrigins;
-
-      // Ensure the current production frontend origin is always allowed.
-      if (!origins.includes("https://kmj-mauve.vercel.app")) {
-        origins.push("https://kmj-mauve.vercel.app");
-      }
-
-      return Array.from(new Set(origins)).filter(Boolean);
-    })(),
+    // These origins are ALWAYS allowed, regardless of CLIENT_URL env var.
+    // Add any new deployment URL here and redeploy.
+    pinnedOrigins: [
+      // Local development
+      "http://localhost:5173",
+      "http://localhost:3000",
+      // Vercel production
+      "https://kmj-mauve.vercel.app",
+      "https://kmj-billing-system.vercel.app",
+      // Custom domain
+      "http://kmjinfo.com",
+      "https://kmjinfo.com",
+      "http://www.kmjinfo.com",
+      "https://www.kmjinfo.com",
+    ],
     credentials: true,
   },
 };

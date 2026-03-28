@@ -58,8 +58,32 @@ app.use(
 );
 
 // CORS - Enable Cross-Origin Resource Sharing
+//
+// Allowed origins = CLIENT_URL env var (comma-separated) merged with the
+// pinned production list. CLIENT_URL never replaces the pinned list — it
+// only adds to it. This prevents a misconfigured Render env var from
+// silently blocking legitimate production origins.
+const buildAllowedOrigins = () => {
+  const pinned = config.cors.pinnedOrigins;
+  const fromEnv = process.env.CLIENT_URL
+    ? process.env.CLIENT_URL
+        .split(",")
+        .map((u) => u.trim().replace(/\/+$/, "")) // strip trailing slashes
+        .filter(Boolean)
+    : [];
+  // CLIENT_URL always merges with the pinned list — it never replaces it.
+  return Array.from(new Set([...pinned, ...fromEnv]));
+};
+
+const allowedOrigins = buildAllowedOrigins();
+
 const corsOptions = {
-  origin: config.cors.origin,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (same-origin, curl, mobile apps, Render healthcheck).
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin '${origin}' is not allowed`));
+  },
   credentials: config.cors.credentials,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: [
@@ -69,7 +93,7 @@ const corsOptions = {
     "Accept",
   ],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
-  maxAge: 600, // Cache preflight request for 10 minutes
+  maxAge: 600,
 };
 
 app.use(cors(corsOptions));
