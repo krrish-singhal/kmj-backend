@@ -38,8 +38,8 @@ export const getAllMembers = async (req, res, next) => {
     gender = "",
     relation = "",
     education = "",
-    sortBy = "createdAt",
-    sortOrder = "desc",
+    sortBy = "Mid",
+    sortOrder = "asc",
   } = req.query;
 
   // Hard cap to reduce Firestore reads

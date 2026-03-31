@@ -115,11 +115,24 @@ export const matchesFilter = (doc, filter) => {
   return true;
 };
 
+// Parses a "WARD/HOUSE" Mahal ID string (e.g. "2/117", "3/20") into a
+// numeric sort key so that numeric ordering is used instead of lexicographic.
+// Returns null when the input does not match the pattern.
+const _MID_PATTERN = /^(\d+)\/(\d+)$/;
+const _parseMidKey = (s) => {
+  const m = _MID_PATTERN.exec(String(s));
+  return m ? parseInt(m[1], 10) * 100_000 + parseInt(m[2], 10) : null;
+};
+
 export const compareValues = (a, b) => {
   if (a === b) return 0;
   if (a === undefined || a === null) return -1;
   if (b === undefined || b === null) return 1;
   if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
   if (typeof a === "number" && typeof b === "number") return a - b;
+  // Numeric "WARD/HOUSE" Mahal ID comparison (e.g. "2/117" < "2/20" numerically)
+  const na = _parseMidKey(String(a));
+  const nb = _parseMidKey(String(b));
+  if (na !== null && nb !== null) return na - nb;
   return String(a).localeCompare(String(b));
 };

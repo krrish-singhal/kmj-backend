@@ -66,8 +66,7 @@ app.use(
 const buildAllowedOrigins = () => {
   const pinned = config.cors.pinnedOrigins;
   const fromEnv = process.env.CLIENT_URL
-    ? process.env.CLIENT_URL
-        .split(",")
+    ? process.env.CLIENT_URL.split(",")
         .map((u) => u.trim().replace(/\/+$/, "")) // strip trailing slashes
         .filter(Boolean)
     : [];

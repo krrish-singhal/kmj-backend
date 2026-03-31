@@ -288,12 +288,6 @@ class FirestoreQuery {
       return meta;
     };
 
-    const filterMeta = analyzeFilter(filter);
-    const canUseNativeQuery =
-      !filterMeta.hasOr &&
-      !filterMeta.hasRegex &&
-      !filterMeta.hasUnknownOperator;
-
     const MAX_FETCH = Number(process.env.FIRESTORE_QUERY_MAX_FETCH || 500);
     const DEFAULT_LIMIT = Number(process.env.FIRESTORE_DEFAULT_LIMIT || 20);
     const requestedSkip = Number(this._skip) || 0;
@@ -306,8 +300,8 @@ class FirestoreQuery {
         ? requestedLimitRaw
         : DEFAULT_LIMIT;
 
-    // For non-native queries, we cap total documents fetched to avoid full scans.
-    // We over-fetch (skip + limit) when possible, then slice in JS.
+    // Cap total documents fetched to avoid full scans.
+    // We over-fetch (skip + limit) and paginate in JS.
     const overFetchLimit = (() => {
       if (requestedLimit === undefined) return MAX_FETCH;
       const need = Math.max(0, requestedSkip + requestedLimit);
@@ -315,12 +309,6 @@ class FirestoreQuery {
     })();
 
     const runSingleQuery = async (singleFilter) => {
-      const singleMeta = analyzeFilter(singleFilter);
-      const nativeOk =
-        !singleMeta.hasOr &&
-        !singleMeta.hasRegex &&
-        !singleMeta.hasUnknownOperator;
-
       let q = db.collection(this.model.collectionName);
 
       // Apply Firestore-native filters when possible; anything not supported is handled by post-filter below.
@@ -382,94 +370,17 @@ class FirestoreQuery {
         }
       }
 
-      // Keep a reference to the filtered query *before* sorting/pagination.
-      // Firestore missing-index errors happen at execution time (q.get), so we may need to retry.
-      const qFiltered = q;
-
-      if (nativeOk) {
-        // Sorting (best-effort). If Firestore rejects orderBy (missing index), we fall back to JS sort.
-        if (this._sort && typeof this._sort === "object") {
-          try {
-            const [[sortField, sortDir]] = Object.entries(this._sort);
-            const direction =
-              sortDir === -1 || sortDir === "desc" ? "desc" : "asc";
-
-            // Firestore inequality rule: first orderBy must match inequality field.
-            // Only apply sortField orderBy directly if it doesn't violate inequality constraints.
-            const [ineqField] = singleMeta.inequalityFields;
-            if (!ineqField || ineqField === sortField) {
-              q = q.orderBy(sortField, direction);
-            } else {
-              // Keep query valid; then JS will sort by requested sortField after fetch.
-              q = q.orderBy(ineqField, "asc");
-            }
-          } catch {
-            // ignore; JS sort later
-          }
-        }
-
-        // Pagination
-        if (requestedSkip) {
-          try {
-            q = q.offset(requestedSkip);
-          } catch {
-            // ignore
-          }
-        }
-
-        if (requestedLimit !== undefined) {
-          try {
-            q = q.limit(requestedLimit);
-          } catch {
-            // ignore
-          }
-        }
-      } else {
-        // Non-native: cap reads to prevent full scans.
-        try {
-          q = q.limit(overFetchLimit);
-        } catch {
-          // ignore
-        }
-      }
-
-      const isMissingIndexError = (err) => {
-        const msg = String(err?.message || "");
-        return err?.code === 9 && /index/i.test(msg);
-      };
-
+      // Always cap reads to prevent full scans.
+      // Sorting and pagination are always applied in JS below to ensure correct
+      // ordering for fields like Mid ("WARD/HOUSE" numeric strings).
       try {
-        const snap = await q.get();
-        return snap.docs.map((d) => ({ _id: d.id, ...d.data() }));
-      } catch (err) {
-        // If a native filtered+sorted query fails due to missing composite index,
-        // retry without orderBy/offset/limit and do sort/pagination in JS.
-        if (nativeOk && isMissingIndexError(err)) {
-          let qFallback = qFiltered;
-          try {
-            qFallback = qFallback.limit(overFetchLimit);
-          } catch {
-            // ignore
-          }
-
-          const snap2 = await qFallback.get();
-          let docs2 = snap2.docs.map((d) => ({ _id: d.id, ...d.data() }));
-
-          if (this._sort && typeof this._sort === "object") {
-            const [[field, dir]] = Object.entries(this._sort);
-            const direction = dir === -1 || dir === "desc" ? -1 : 1;
-            docs2.sort((a, b) => direction * compareValues(a[field], b[field]));
-          }
-
-          if (requestedSkip) docs2 = docs2.slice(requestedSkip);
-          if (requestedLimit !== undefined)
-            docs2 = docs2.slice(0, requestedLimit);
-
-          return docs2;
-        }
-
-        throw err;
+        q = q.limit(overFetchLimit);
+      } catch {
+        // ignore
       }
+
+      const snap = await q.get();
+      return snap.docs.map((d) => ({ _id: d.id, ...d.data() }));
     };
 
     let docs = [];
@@ -502,18 +413,17 @@ class FirestoreQuery {
     // Post-filter (regex, $or, etc)
     docs = docs.filter((d) => matchesFilter(d, filter));
 
-    // Sort/Pagination in JS only when we couldn't do it safely in Firestore.
-    if (!canUseNativeQuery) {
-      if (this._sort && typeof this._sort === "object") {
-        const [[field, dir]] = Object.entries(this._sort);
-        const direction = dir === -1 || dir === "desc" ? -1 : 1;
-        docs.sort((a, b) => direction * compareValues(a[field], b[field]));
-      }
-
-      if (this._skip) docs = docs.slice(this._skip);
-      if (this._limit !== undefined && this._limit !== null)
-        docs = docs.slice(0, this._limit);
+    // Always sort and paginate in JS to ensure correct ordering
+    // (e.g. numeric "WARD/HOUSE" Mid fields that Firestore sorts lexicographically).
+    if (this._sort && typeof this._sort === "object") {
+      const [[field, dir]] = Object.entries(this._sort);
+      const direction = dir === -1 || dir === "desc" ? -1 : 1;
+      docs.sort((a, b) => direction * compareValues(a[field], b[field]));
     }
+
+    if (this._skip) docs = docs.slice(this._skip);
+    if (this._limit !== undefined && this._limit !== null)
+      docs = docs.slice(0, this._limit);
 
     // Select
     docs = docs.map((d) =>
