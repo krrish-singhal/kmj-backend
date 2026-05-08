@@ -18,6 +18,7 @@ import reportRoutes from "./reportRoutes.js";
 import certificateRoutes from "./certificateRoutes.js";
 import uploadRoutes from "./uploadRoutes.js";
 import contactRoutes from "./contactRoutes.js";
+import portalRoutes from "./portalRoutes.js";
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ router.use(`${API_VERSION}/reports`, reportRoutes);
 router.use(`${API_VERSION}/certificates`, certificateRoutes);
 router.use(`${API_VERSION}/upload`, uploadRoutes);
 router.use(`${API_VERSION}/contacts`, contactRoutes);
+router.use(`${API_VERSION}/portal`, portalRoutes);
 
 // API documentation endpoint
 router.get(`${API_VERSION}/docs`, (req, res) => {

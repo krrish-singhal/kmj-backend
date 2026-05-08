@@ -6,6 +6,10 @@
 import Inventory from "../models/Inventory.js";
 import { deleteFromCloudinary } from "../config/cloudinary.js";
 import { logger } from "../utils/logger.js";
+import { createTtlCache } from "../utils/ttlCache.js";
+
+// 30-second cache for list results; cleared on every mutation.
+const inventoryCache = createTtlCache(30_000);
 
 // @desc    Get all inventory items
 // @route   GET /api/v1/inventory
@@ -13,13 +17,18 @@ import { logger } from "../utils/logger.js";
 export const getInventoryItems = async (req, res) => {
   try {
     const { department } = req.query;
+    const cacheKey = `inventory:${department || "all"}`;
 
-    const filter = { isDeleted: false };
-    if (department) filter.department = department;
+    let items = inventoryCache.get(cacheKey);
+    if (!items) {
+      const filter = { isDeleted: false };
+      if (department) filter.department = department;
 
-    const items = await Inventory.find(filter)
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+      items = await Inventory.find(filter)
+        .populate("createdBy", "name email")
+        .sort({ createdAt: -1 });
+      inventoryCache.set(cacheKey, items);
+    }
 
     res.status(200).json({
       success: true,
@@ -76,6 +85,7 @@ export const createInventoryItem = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    inventoryCache.clear();
     res.status(201).json({
       success: true,
       data: item,
@@ -110,6 +120,7 @@ export const updateInventoryItem = async (req, res) => {
       { new: true, runValidators: true },
     );
 
+    inventoryCache.clear();
     res.status(200).json({
       success: true,
       data: updatedItem,
@@ -168,6 +179,7 @@ export const deleteInventoryItem = async (req, res) => {
     item.isDeleted = true;
     await item.save();
 
+    inventoryCache.clear();
     res.status(200).json({
       success: true,
       message: "Inventory item deleted successfully",

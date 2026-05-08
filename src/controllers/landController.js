@@ -6,6 +6,10 @@
 import Land from "../models/Land.js";
 import { deleteFromCloudinary } from "../config/cloudinary.js";
 import { logger } from "../utils/logger.js";
+import { createTtlCache } from "../utils/ttlCache.js";
+
+// 30-second cache for list results; cleared on every mutation.
+const landCache = createTtlCache(30_000);
 
 // @desc    Get all land records
 // @route   GET /api/v1/lands
@@ -13,13 +17,18 @@ import { logger } from "../utils/logger.js";
 export const getLands = async (req, res) => {
   try {
     const { ward } = req.query;
+    const cacheKey = `lands:${ward || "all"}`;
 
-    const filter = { isDeleted: false };
-    if (ward) filter.ward = ward;
+    let lands = landCache.get(cacheKey);
+    if (!lands) {
+      const filter = { isDeleted: false };
+      if (ward) filter.ward = ward;
 
-    const lands = await Land.find(filter)
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+      lands = await Land.find(filter)
+        .populate("createdBy", "name email")
+        .sort({ createdAt: -1 });
+      landCache.set(cacheKey, lands);
+    }
 
     res.status(200).json({
       success: true,
@@ -81,6 +90,7 @@ export const createLand = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    landCache.clear();
     res.status(201).json({
       success: true,
       data: land,
@@ -114,6 +124,7 @@ export const updateLand = async (req, res) => {
       runValidators: true,
     });
 
+    landCache.clear();
     res.status(200).json({
       success: true,
       data: updatedLand,
@@ -168,6 +179,7 @@ export const deleteLand = async (req, res) => {
     land.isDeleted = true;
     await land.save();
 
+    landCache.clear();
     res.status(200).json({
       success: true,
       message: "Land record deleted successfully",

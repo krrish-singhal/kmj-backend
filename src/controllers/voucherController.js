@@ -4,6 +4,10 @@
  */
 
 import Voucher from "../models/Voucher.js";
+import { createTtlCache } from "../utils/ttlCache.js";
+
+// 30-second cache for list results; cleared on every mutation.
+const voucherCache = createTtlCache(30_000);
 
 // @desc    Get all vouchers
 // @route   GET /api/v1/vouchers
@@ -11,19 +15,23 @@ import Voucher from "../models/Voucher.js";
 export const getVouchers = async (req, res) => {
   try {
     const { service, startDate, endDate } = req.query;
+    const cacheKey = `vouchers:${service || "all"}:${startDate || ""}:${endDate || ""}`;
 
-    const filter = { isDeleted: false };
+    let vouchers = voucherCache.get(cacheKey);
+    if (!vouchers) {
+      const filter = { isDeleted: false };
+      if (service) filter.service = service;
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate);
+      }
 
-    if (service) filter.service = service;
-    if (startDate || endDate) {
-      filter.createdAt = {};
-      if (startDate) filter.createdAt.$gte = new Date(startDate);
-      if (endDate) filter.createdAt.$lte = new Date(endDate);
+      vouchers = await Voucher.find(filter)
+        .populate("createdBy", "name email")
+        .sort({ createdAt: -1 });
+      voucherCache.set(cacheKey, vouchers);
     }
-
-    const vouchers = await Voucher.find(filter)
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -85,6 +93,7 @@ export const createVoucher = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    voucherCache.clear();
     res.status(201).json({
       success: true,
       data: voucher,
@@ -119,6 +128,7 @@ export const updateVoucher = async (req, res) => {
       { new: true, runValidators: true },
     );
 
+    voucherCache.clear();
     res.status(200).json({
       success: true,
       data: updatedVoucher,
@@ -150,6 +160,7 @@ export const deleteVoucher = async (req, res) => {
     voucher.isDeleted = true;
     await voucher.save();
 
+    voucherCache.clear();
     res.status(200).json({
       success: true,
       message: "Voucher deleted successfully",

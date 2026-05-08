@@ -23,6 +23,10 @@ export const createTtlCache = (defaultTtlMs = 10_000) => {
     return value;
   };
 
+  const del = (key) => store.delete(key);
+
+  const clear = () => store.clear();
+
   const wrap = async (key, fn, ttlMs = defaultTtlMs) => {
     const cached = get(key);
     if (cached !== undefined) return cached;
@@ -31,5 +35,5 @@ export const createTtlCache = (defaultTtlMs = 10_000) => {
     return value;
   };
 
-  return { get, set, wrap };
+  return { get, set, del, clear, wrap };
 };

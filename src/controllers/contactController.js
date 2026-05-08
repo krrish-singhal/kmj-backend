@@ -6,6 +6,10 @@
 import Contact from "../models/Contact.js";
 import { deleteFromCloudinary } from "../config/cloudinary.js";
 import { logger } from "../utils/logger.js";
+import { createTtlCache } from "../utils/ttlCache.js";
+
+// 30-second cache for contact lists; cleared on every mutation.
+const contactsCache = createTtlCache(30_000);
 
 // @desc    Get all contacts
 // @route   GET /api/v1/contacts
@@ -13,22 +17,23 @@ import { logger } from "../utils/logger.js";
 export const getContacts = async (req, res) => {
   try {
     const { search } = req.query;
+    const cacheKey = `contacts:${search || "all"}`;
 
-    const filter = { isDeleted: false };
+    let contacts = contactsCache.get(cacheKey);
+    if (!contacts) {
+      const filter = { isDeleted: false };
+      let query = Contact.find(filter);
 
-    let query = Contact.find(filter);
+      // Text search
+      if (search) {
+        query = Contact.find({ ...filter, $text: { $search: search } });
+      }
 
-    // Text search
-    if (search) {
-      query = Contact.find({
-        ...filter,
-        $text: { $search: search },
-      });
+      contacts = await query
+        .populate("createdBy", "name email")
+        .sort({ createdAt: -1 });
+      contactsCache.set(cacheKey, contacts);
     }
-
-    const contacts = await query
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -94,6 +99,7 @@ export const createContact = async (req, res) => {
 
     logger.info(`Contact created: ${contact._id} by user ${req.user._id}`);
 
+    contactsCache.clear();
     res.status(201).json({
       success: true,
       data: contact,
@@ -135,6 +141,7 @@ export const updateContact = async (req, res) => {
 
     logger.info(`Contact updated: ${contact._id} by user ${req.user._id}`);
 
+    contactsCache.clear();
     res.status(200).json({
       success: true,
       data: contact,
@@ -169,6 +176,7 @@ export const deleteContact = async (req, res) => {
 
     logger.info(`Contact deleted: ${contact._id} by user ${req.user._id}`);
 
+    contactsCache.clear();
     res.status(200).json({
       success: true,
       message: "Contact deleted successfully",
